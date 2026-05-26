@@ -87,10 +87,10 @@ export async function encryptContactData(
     const encryptedBuffer = await crypto.subtle.encrypt(
       {
         name: ENCRYPTION_ALGORITHM,
-        iv: iv, // Pass Uint8Array directly instead of ArrayBuffer
+        iv,
       },
       key,
-      dataBytes // Pass Uint8Array directly instead of ArrayBuffer
+      dataBytes
     );
     
     // Combine IV and encrypted data
@@ -130,10 +130,10 @@ export async function decryptContactData(
     const decryptedBuffer = await crypto.subtle.decrypt(
       {
         name: ENCRYPTION_ALGORITHM,
-        iv: iv, // Pass Uint8Array directly
+        iv,
       },
       key,
-      encrypted // Pass Uint8Array directly
+      encrypted
     );
     
     const decoder = new TextDecoder();
