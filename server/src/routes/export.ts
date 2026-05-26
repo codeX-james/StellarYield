@@ -127,7 +127,8 @@ exportRouter.get(
       res.json(preview);
     } catch (error) {
       console.error(
-        `[export] Failed to build tax preview for ${address}`,
+        "[export] Failed to build tax preview for address: %s",
+        encodeURIComponent(address),
         error,
       );
       sendError(
@@ -188,7 +189,7 @@ exportRouter.get(
       const csvStream = createCSVStream(records);
       csvStream.pipe(res);
     } catch (error) {
-      console.error(`[export] Failed to export data for ${address}`, error);
+      console.error("[export] Failed to export data for address: %s", encodeURIComponent(address), error);
       sendError(res, 500, "EXPORT_FAILED", "Failed to generate export.");
     }
   },
