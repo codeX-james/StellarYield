@@ -54,8 +54,8 @@ The backend runs on `http://localhost:3001`.
 
 - `STELLAR_HORIZON_TIMEOUT_MS`: Timeout for Horizon API calls in milliseconds (default: `10000`)
 - `SOROBAN_RPC_TIMEOUT_MS`: Timeout for Soroban RPC API calls in milliseconds (default: `10000`)
-The example env files document required and optional values. Keep real secrets
-out of git; frontend values must be public `VITE_` values only.
+  The example env files document required and optional values. Keep real secrets
+  out of git; frontend values must be public `VITE_` values only.
 
 The backend also performs startup environment validation (warnings in development, errors in production). For CI-parity examples of **minimum env vars for backend tests** (including `DATABASE_URL`) and common validation failures, see [docs/backend_testing.md](./docs/backend_testing.md).
 
@@ -122,22 +122,22 @@ When the pull request workflow fails, GitHub Actions uploads frontend failure ar
 
 ## Vercel Deployment Settings
 
-The frontend is deployed via Vercel. To avoid the recurring `client/client/...` path failures that have appeared in past preview deployments, the Vercel project must be configured against the `client/` directory and not the repository root. The committed `vercel.json` already encodes the install, build, and output paths *relative to that root*, so misconfiguring the Vercel root re-introduces the doubled path.
+The frontend is deployed via Vercel. To avoid the recurring `client/client/...` path failures that have appeared in past preview deployments, the Vercel project must be configured against the `client/` directory and not the repository root. The committed `vercel.json` already encodes the install, build, and output paths _relative to that root_, so misconfiguring the Vercel root re-introduces the doubled path.
 
 Use these values when creating or auditing the Vercel project:
 
-| Setting              | Value                                             |
-| -------------------- | ------------------------------------------------- |
-| Framework Preset     | Vite                                              |
-| Root Directory       | `client`                                          |
-| Install Command      | `npm ci --no-audit`                               |
-| Build Command        | `npm run build`                                   |
-| Output Directory     | `dist`                                            |
-| Node.js Version      | 20.x                                              |
+| Setting          | Value               |
+| ---------------- | ------------------- |
+| Framework Preset | Vite                |
+| Root Directory   | `client`            |
+| Install Command  | `npm ci --no-audit` |
+| Build Command    | `npm run build`     |
+| Output Directory | `dist`              |
+| Node.js Version  | 20.x                |
 
 For a full breakdown of how local, preview, and production environments differ — including backend assumptions and common failure modes — see [docs/deployment-environment-matrix.md](./docs/deployment-environment-matrix.md).
 
-These match the committed [`vercel.json`](./vercel.json) at the repository root. Vercel resolves the install/build/output paths *inside* the configured Root Directory, so leaving the root unset (or pointing it at the repo root) makes Vercel run `npm run build` from a folder that has no `build` script.
+These match the committed [`vercel.json`](./vercel.json) at the repository root. Vercel resolves the install/build/output paths _inside_ the configured Root Directory, so leaving the root unset (or pointing it at the repo root) makes Vercel run `npm run build` from a folder that has no `build` script.
 
 ### Troubleshooting
 
@@ -148,9 +148,10 @@ These match the committed [`vercel.json`](./vercel.json) at the repository root.
 
 ## Contributor and Release Docs
 
-   The mock API will be available at http://localhost:3001
+The mock API will be available at http://localhost:3001
 
 ## 🧪 Post-deploy smoke test
+
 After deploying the frontend + backend, run the included smoke test to validate basic reachability.
 
 ```bash
@@ -161,9 +162,9 @@ bash scripts/smoke-test.sh
 
 - **Checks**: `GET /api/yields`, `GET /api/metrics`, and the frontend root.
 - **Config**: `FRONTEND_URL` and `BACKEND_URL` environment variables.
-🌊 Contributing via Drips Wave
-We are proudly participating in the Stellar Wave Program via Drips! We are actively looking for Web3 full-stack and Rust developers.
-Check our open issues labeled `Stellar Wave`, apply via the Drips App, and submit your PR to earn rewards funded by the Stellar Development Foundation!
+  🌊 Contributing via Drips Wave
+  We are proudly participating in the Stellar Wave Program via Drips! We are actively looking for Web3 full-stack and Rust developers.
+  Check our open issues labeled `Stellar Wave`, apply via the Drips App, and submit your PR to earn rewards funded by the Stellar Development Foundation!
 - [Metrics token rotation guide](./docs/metrics-token-rotation.md)
 - [Contributing Guide](./CONTRIBUTING.md)
 - [Contributor guide: CI checks, local verification, and getting help](./docs/contributor-guide.md)
@@ -175,7 +176,7 @@ StellarYield is participating in the Stellar Wave Program via Drips. Contributor
 
 ---
 
-## ✅ Post-deploy smoke test
+## ✅ Post-deploy smoke tests
 
 After merge/deploy, you can quickly verify the public app + API are reachable:
 
