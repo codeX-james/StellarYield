@@ -49,6 +49,14 @@ If you are adding a "Good First Issue" to the backlog, it should:
 * Have a narrow scope (e.g., a single UI component or a read-only view function).
 * Include explicit acceptance criteria.
 * Be easily testable in isolation.
+## Contract Security
+
+Pull requests that touch `contracts/` must pass the checklist in
+[docs/contract-security-checklist.md](./docs/contract-security-checklist.md)
+before review. The checklist covers storage schema changes, authorization checks,
+arithmetic safety, test coverage, and admin permission review.
+
+## CI Failure Artifacts
 
 ### 🧪 Running the Fuzzing Suite
 The vault includes a property-based testing suite built with `proptest`. To run the fuzz tests:
