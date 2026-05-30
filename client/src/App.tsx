@@ -6,11 +6,13 @@ import {
   useLocation,
 } from "react-router-dom";
 import Dashboard from "./components/Dashboard";
-import ApyDashboard from "./components/dashboard/ApyDashboard";
+const ApyDashboard = lazy(() => import("./components/dashboard/ApyDashboard"));
 import AIAdvisor from "./components/AIAdvisor";
 import Vault from "./components/Vault";
-import PortfolioPage from "./components/portfolio/PortfolioPage";
-import GovernanceDashboard from "./pages/governance/GovernanceDashboard";
+const PortfolioPage = lazy(() => import("./components/portfolio/PortfolioPage"));
+const GovernanceDashboard = lazy(
+  () => import("./pages/governance/GovernanceDashboard"),
+);
 import QuestsDashboard from "./pages/quests/QuestsDashboard";
 import ConnectWalletButton from "./components/wallet/ConnectWalletButton";
 import NotificationBell from "./components/Navigation/NotificationBell";
@@ -21,17 +23,20 @@ import PnLChart from "./features/pnl/PnLChart";
 import TaxExport from "./features/taxes/TaxExport";
 import ReferralDashboard from "./features/referrals/ReferralDashboard";
 import VestingDashboard from "./pages/vesting/VestingDashboard";
-import TransparencyDashboard from "./pages/transparency/TransparencyDashboard";
+const TransparencyDashboard = lazy(
+  () => import("./pages/transparency/TransparencyDashboard"),
+);
 import RiskChronology from "./pages/transparency/RiskChronology";
 import RelayerStatusPage from "./pages/transparency/RelayerStatusPage";
-import StressTestDashboard from "./pages/StressTestDashboard";
+const StressTestDashboard = lazy(() => import("./pages/StressTestDashboard"));
 import YieldForGood from "./features/donations/YieldForGood";
 import YieldCalculator from "./components/calculator/YieldCalculator";
 import StrategyLeaderboard from "./pages/leaderboard/StrategyLeaderboard";
 import TreasurySimulation from "./pages/treasury/TreasurySimulation";
 import WalletSessionReview from "./auth/WalletSessionReview";
 import { useWallet } from "./context/useWallet";
-import { useState, useEffect } from "react";
+import { lazy, useState, useEffect } from "react";
+import RouteBoundary from "./components/common/RouteBoundary";
 import {
   LayoutDashboard,
   BarChart3,
@@ -458,7 +463,11 @@ const router = createBrowserRouter([
       },
       {
         path: "/apy",
-        element: <ApyDashboard />,
+        element: (
+          <RouteBoundary>
+            <ApyDashboard />
+          </RouteBoundary>
+        ),
       },
       {
         path: "/ai-advisor",
@@ -466,7 +475,11 @@ const router = createBrowserRouter([
       },
       {
         path: "/stress",
-        element: <StressTestDashboard />,
+        element: (
+          <RouteBoundary>
+            <StressTestDashboard />
+          </RouteBoundary>
+        ),
       },
       {
         path: "/vault",
@@ -482,7 +495,11 @@ const router = createBrowserRouter([
       },
       {
         path: "/portfolio",
-        element: <PortfolioPage />,
+        element: (
+          <RouteBoundary>
+            <PortfolioPage />
+          </RouteBoundary>
+        ),
       },
       {
         path: "/calculator",
@@ -498,7 +515,11 @@ const router = createBrowserRouter([
       },
       {
         path: "/governance",
-        element: <GovernanceDashboard />,
+        element: (
+          <RouteBoundary>
+            <GovernanceDashboard />
+          </RouteBoundary>
+        ),
       },
       {
         path: "/quests",
@@ -530,7 +551,11 @@ const router = createBrowserRouter([
       },
       {
         path: "/transparency",
-        element: <TransparencyDashboard />,
+        element: (
+          <RouteBoundary>
+            <TransparencyDashboard />
+          </RouteBoundary>
+        ),
       },
       {
         path: "/transparency/incidents",
