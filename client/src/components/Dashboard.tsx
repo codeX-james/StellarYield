@@ -1,3 +1,54 @@
+import React, { useEffect, useState, Suspense } from "react";
+import { Activity, ArrowUpRight, ShieldCheck, TrendingUp } from "lucide-react";
+import ApyHistoryChart from "./charts/ApyHistoryChart";
+import { YieldFlowCanvas } from "./visualizations";
+import MempoolVisualizer from "./mempool_graph/MempoolVisualizer";
+import CorrelationHeatmap from "./charts/CorrelationHeatmap";
+import { apiUrl } from "../lib/api";
+import { useBackendStatus } from "../hooks/useBackendStatus";
+import { BackendUnavailableAlert } from "./BackendUnavailable";
+import ApyAttribution from "../features/yields/ApyAttribution";
+
+interface YieldData {
+  protocol: string;
+  asset: string;
+  apy: number;
+  tvl: number;
+  risk: string;
+  attribution: {
+    baseYield: number;
+    incentives: number;
+    compounding: number;
+    tacticalRotation: number;
+  };
+}
+
+export default function Dashboard() {
+  const [yields, setYields] = useState<YieldData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showError, setShowError] = useState(true);
+  const backendStatus = useBackendStatus();
+
+  const toggleRow = (index: number) => {
+    setExpandedRows((prev) => ({ ...prev, [index]: !prev[index] }));
+  };
+
+  const [expandedRows, setExpandedRows] = useState<Record<number, boolean>>({});
+
+  useEffect(() => {
+    fetch(apiUrl("/api/yields"))
+      .then((res) => res.json())
+      .then((data) => {
+        setYields(data);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error("Failed to fetch yields", err);
+        setError("Unable to fetch yield data from backend");
+        setLoading(false);
+      });
+  }, []);
 import { useState } from "react";
 import {
   Gauge,
@@ -20,6 +71,21 @@ export default function Dashboard() {
         <div className="backdrop-text backdrop-text-right">YIELD</div>
       </div>
 
+      {error && showError && backendStatus === "unavailable" && (
+        <BackendUnavailableAlert
+          message="Yield data is currently unavailable. Showing cached or offline data if available."
+          onDismiss={() => setShowError(false)}
+        />
+      )}
+
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+        <div className="glass-card border-l-4 border-[#6C5DD3] p-6">
+          <div className="mb-4 flex items-start justify-between">
+            <div>
+              <p className="text-sm font-medium tracking-wide text-gray-400">
+                TOTAL VALUE LOCKED
+              </p>
+              <h3 className="mt-1 text-3xl font-bold shadow-sm">$4,250,000</h3>
       {/* Main floating card board */}
       <div className="home-card-wrapper">
         <section className="hero-shell">
