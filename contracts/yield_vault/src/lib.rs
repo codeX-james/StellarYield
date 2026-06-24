@@ -44,6 +44,7 @@ mod donations;
 mod emergency;
 mod fees;
 mod flashloan;
+mod invariants;
 mod keeper;
 mod oracle;
 mod referrals;
@@ -135,9 +136,9 @@ impl YieldVault {
         amount: i128,
         min_shares_out: i128,
     ) -> Result<i128, VaultError> {
-        Self::require_init(&env)?;
+        YieldVault::require_init(&env)?;
         from.require_auth();
-        if Self::is_paused(&env) {
+        if YieldVault::is_paused(&env) {
             return Err(VaultError::Paused);
         }
 
@@ -150,9 +151,9 @@ impl YieldVault {
         let total_assets: i128 = env.storage().instance().get(&DataKey::TotalAssets).unwrap();
 
         // Get secure price for validation (flash-loan resistance)
-        let _price = Self::get_secure_price(&env)?;
+        let _price = YieldVault::get_secure_price(&env)?;
 
-        let shares = Self::preview_deposit(env.clone(), amount)?;
+        let shares = YieldVault::preview_deposit(env.clone(), amount)?;
 
         if shares <= 0 {
             return Err(VaultError::ZeroAmount);
@@ -164,6 +165,9 @@ impl YieldVault {
         // Transfer tokens from depositor to vault
         let client = token::Client::new(&env, &token_addr);
         client.transfer(&from, &env.current_contract_address(), &amount);
+
+        // INVARIANT: Validate deposit accounting
+        YieldVault::validate_deposit_invariant(&env, amount, shares)?;
 
         // Update state
         let user_shares: i128 = env
@@ -215,9 +219,9 @@ impl YieldVault {
         amount: i128,
         min_shares_out: i128,
     ) -> Result<i128, VaultError> {
-        Self::require_init(&env)?;
+        YieldVault::require_init(&env)?;
         payer.require_auth();
-        if Self::is_paused(&env) {
+        if YieldVault::is_paused(&env) {
             return Err(VaultError::Paused);
         }
 
@@ -229,9 +233,9 @@ impl YieldVault {
         let total_shares: i128 = env.storage().instance().get(&DataKey::TotalShares).unwrap();
         let total_assets: i128 = env.storage().instance().get(&DataKey::TotalAssets).unwrap();
 
-        let _price = Self::get_secure_price(&env)?;
+        let _price = YieldVault::get_secure_price(&env)?;
 
-        let shares = Self::preview_deposit(env.clone(), amount)?;
+        let shares = YieldVault::preview_deposit(env.clone(), amount)?;
 
         if shares <= 0 {
             return Err(VaultError::ZeroAmount);
@@ -283,7 +287,7 @@ impl YieldVault {
     /// # Security
     /// Replaces standard zero-check with error. Uses secure price from oracle.
     pub fn withdraw(env: Env, to: Address, shares: i128) -> Result<i128, VaultError> {
-        Self::require_init(&env)?;
+        YieldVault::require_init(&env)?;
         to.require_auth();
 
         if shares <= 0 {
@@ -308,9 +312,12 @@ impl YieldVault {
         }
 
         // Get secure price for validation
-        let _price = Self::get_secure_price(&env)?;
+        let _price = YieldVault::get_secure_price(&env)?;
 
-        let amount = Self::convert_to_assets(env.clone(), shares)?;
+        let amount = YieldVault::convert_to_assets(env.clone(), shares)?;
+
+        // INVARIANT: Validate withdrawal accounting
+        YieldVault::validate_withdrawal_invariant(&env, amount, shares)?;
 
         // Transfer tokens to user
         let token_addr: Address = env.storage().instance().get(&DataKey::Token).unwrap();
@@ -351,18 +358,20 @@ impl YieldVault {
     ///
     /// # Security
     /// Only the admin can call this. Assets are tracked to reflect output.
+    /// Validates rebalancing invariants and records audit trail.
     ///
     /// # Invariants
     /// rebalance_amount <= total_assets
+    /// post: total_assets_new = total_assets_old - amount
     pub fn rebalance(
         env: Env,
         caller: Address,
         target: Address,
         amount: i128,
     ) -> Result<(), VaultError> {
-        Self::require_init(&env)?;
+        YieldVault::require_init(&env)?;
         caller.require_auth();
-        if Self::is_paused(&env) {
+        if YieldVault::is_paused(&env) {
             return Err(VaultError::Paused);
         }
 
@@ -375,6 +384,14 @@ impl YieldVault {
             return Err(VaultError::ZeroAmount);
         }
 
+        // INVARIANT CHECK: Rebalance amount must not exceed total assets
+        YieldVault::validate_rebalance_invariant(&env, amount)?;
+
+        // Check if solvency is breached; if so, prevent rebalancing
+        if YieldVault::is_solvency_breached(&env) {
+            return Err(VaultError::Paused);
+        }
+
         let token_addr: Address = env.storage().instance().get(&DataKey::Token).unwrap();
         let total_assets: i128 = env.storage().instance().get(&DataKey::TotalAssets).unwrap();
 
@@ -385,6 +402,13 @@ impl YieldVault {
         env.storage()
             .instance()
             .set(&DataKey::TotalAssets, &(total_assets - amount));
+
+        // AUDIT: Record rebalance and verify invariant held
+        YieldVault::record_rebalance(&env, amount, target.clone())?;
+
+        // Post-operation invariant check: token balance should decrease
+        YieldVault::check_token_balance_invariant(&env)
+            .ok(); // Non-fatal, log for audit
 
         env.events()
             .publish((symbol_short!("rebal"),), (target, amount));
@@ -466,13 +490,13 @@ impl YieldVault {
 
     /// Returns the admin address.
     pub fn get_admin(env: Env) -> Result<Address, VaultError> {
-        Self::require_init(&env)?;
+        YieldVault::require_init(&env)?;
         Ok(env.storage().instance().get(&DataKey::Admin).unwrap())
     }
 
     /// Returns the deposit token address.
     pub fn get_token(env: Env) -> Result<Address, VaultError> {
-        Self::require_init(&env)?;
+        YieldVault::require_init(&env)?;
         Ok(env.storage().instance().get(&DataKey::Token).unwrap())
     }
 
@@ -487,8 +511,8 @@ impl YieldVault {
         dex_router: Address,
         keeper: Address,
     ) -> Result<(), VaultError> {
-        Self::require_init(&env)?;
-        Self::require_admin(&env, &admin)?;
+        YieldVault::require_init(&env)?;
+        YieldVault::require_admin(&env, &admin)?;
         env.storage()
             .instance()
             .set(&DataKey::RewardProtocol, &reward_protocol);
@@ -523,8 +547,9 @@ impl YieldVault {
     ///
     /// # Security
     /// Re-entrancy protected via Soroban environment.
+    /// Validates harvest accounting invariants: gross = net + keeper_fee.
     pub fn harvest(env: Env, caller: Address, min_amount_out: i128) -> Result<i128, VaultError> {
-        Self::require_init(&env)?;
+        YieldVault::require_init(&env)?;
         caller.require_auth();
         let admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
         let legacy_keeper: Option<Address> = env.storage().instance().get(&DataKey::Keeper);
@@ -533,7 +558,7 @@ impl YieldVault {
             Some(k) => k == &caller,
             None => false,
         };
-        let is_registered = Self::is_registered_keeper(&env, &caller);
+        let is_registered = YieldVault::is_registered_keeper(&env, &caller);
         if !is_admin && !is_legacy_keeper && !is_registered {
             return Err(VaultError::Unauthorized);
         }
@@ -583,11 +608,14 @@ impl YieldVault {
 
         // Step 4: Calculate keeper fee (only for non-admin callers)
         let keeper_fee = if !is_admin {
-            Self::calculate_keeper_fee(&env, amount_out)
+            YieldVault::calculate_keeper_fee(&env, amount_out)
         } else {
             0i128
         };
         let net_amount = amount_out - keeper_fee;
+
+        // INVARIANT: harvest_gross = net_amount + keeper_fee
+        YieldVault::validate_harvest_invariant(&env, amount_out, net_amount, keeper_fee)?;
 
         // Step 5: Pay keeper fee if applicable
         if keeper_fee > 0 {
@@ -608,6 +636,9 @@ impl YieldVault {
         env.storage()
             .instance()
             .set(&DataKey::TotalHarvested, &(total_harvested + net_amount));
+
+        // AUDIT: Record harvest for trail
+        YieldVault::record_harvest(&env, amount_out, 0, keeper_fee)?;
 
         env.events().publish(
             (symbol_short!("harvest"),),
@@ -643,17 +674,17 @@ impl YieldVault {
         amount: i128,
         params: Bytes,
     ) -> Result<i128, VaultError> {
-        Self::flash_loan_impl(&env, &initiator, &receiver, amount, &params)
+        YieldVault::flash_loan_impl(&env, &initiator, &receiver, amount, &params)
     }
 
     /// View function: calculate flash loan fee for a given amount.
     pub fn get_flash_loan_fee(_env: Env, amount: i128) -> i128 {
-        Self::calc_flash_fee(amount)
+        YieldVault::calc_flash_fee(amount)
     }
 
     /// View function: get maximum available flash loan amount.
     pub fn get_max_flash_loan(env: Env) -> Result<i128, VaultError> {
-        Self::max_flash_amount(&env)
+        YieldVault::max_flash_amount(&env)
     }
 
     // ── Emergency Withdrawals ────────────────────────────────────────
@@ -679,7 +710,7 @@ impl YieldVault {
         referee: Address,
         referrer: Address,
     ) -> Result<(), VaultError> {
-        Self::register_referral_impl(env, referee, referrer)
+        YieldVault::register_referral_impl(env, referee, referrer)
     }
 
     /// Deposit with an optional referrer.
@@ -689,42 +720,42 @@ impl YieldVault {
         amount: i128,
         referrer: Address,
     ) -> Result<i128, VaultError> {
-        Self::deposit_with_referral_impl(env, from, amount, referrer)
+        YieldVault::deposit_with_referral_impl(env, from, amount, referrer)
     }
 
     /// Claim accumulated referral rewards.
     pub fn claim_referral_rewards(env: Env, referrer: Address) -> Result<i128, VaultError> {
-        Self::claim_referral_rewards_impl(env, referrer)
+        YieldVault::claim_referral_rewards_impl(env, referrer)
     }
 
     /// Set referral fee (admin only).
     pub fn set_referral_fee(env: Env, admin: Address, fee_bps: i128) -> Result<(), VaultError> {
-        Self::set_referral_fee_impl(env, admin, fee_bps)
+        YieldVault::set_referral_fee_impl(env, admin, fee_bps)
     }
 
     /// Get referrer for a given address.
     pub fn get_referrer(env: Env, referee: Address) -> Option<Address> {
-        Self::get_referrer_view(env, referee)
+        YieldVault::get_referrer_view(env, referee)
     }
 
     /// Get referred TVL for a referrer.
     pub fn get_referred_tvl(env: Env, referrer: Address) -> i128 {
-        Self::get_referred_tvl_view(env, referrer)
+        YieldVault::get_referred_tvl_view(env, referrer)
     }
 
     /// Get unclaimed referral rewards.
     pub fn get_referral_rewards(env: Env, referrer: Address) -> i128 {
-        Self::get_referral_rewards_view(env, referrer)
+        YieldVault::get_referral_rewards_view(env, referrer)
     }
 
     /// Get referral fee in basis points.
     pub fn get_referral_fee_bps(env: Env) -> i128 {
-        Self::get_referral_fee_bps_view(env)
+        YieldVault::get_referral_fee_bps_view(env)
     }
 
     /// Get total referral rewards distributed.
     pub fn get_total_referral_rewards(env: Env) -> i128 {
-        Self::get_total_referral_rewards_view(env)
+        YieldVault::get_total_referral_rewards_view(env)
     }
 
     // ── Internal ────────────────────────────────────────────────────
@@ -752,7 +783,7 @@ impl YieldVault {
 
 impl VaultStandard for YieldVault {
     fn total_assets(env: Env) -> Result<i128, VaultError> {
-        Self::require_init(&env)?;
+        YieldVault::require_init(&env)?;
         Ok(env
             .storage()
             .instance()
@@ -761,7 +792,7 @@ impl VaultStandard for YieldVault {
     }
 
     fn convert_to_shares(env: Env, assets: i128) -> Result<i128, VaultError> {
-        Self::require_init(&env)?;
+        YieldVault::require_init(&env)?;
         if assets <= 0 {
             return Ok(0);
         }
@@ -783,7 +814,7 @@ impl VaultStandard for YieldVault {
     }
 
     fn convert_to_assets(env: Env, shares: i128) -> Result<i128, VaultError> {
-        Self::require_init(&env)?;
+        YieldVault::require_init(&env)?;
         if shares <= 0 {
             return Ok(0);
         }
@@ -804,7 +835,7 @@ impl VaultStandard for YieldVault {
     }
 
     fn preview_deposit(env: Env, assets: i128) -> Result<i128, VaultError> {
-        Self::require_init(&env)?;
+        YieldVault::require_init(&env)?;
         if assets <= 0 {
             return Err(VaultError::ZeroAmount);
         }
@@ -826,7 +857,7 @@ impl VaultStandard for YieldVault {
     }
 
     fn preview_withdraw(env: Env, shares: i128) -> Result<i128, VaultError> {
-        Self::require_init(&env)?;
+        YieldVault::require_init(&env)?;
         if shares <= 0 {
             return Err(VaultError::ZeroAmount);
         }
@@ -847,7 +878,7 @@ impl VaultStandard for YieldVault {
     }
 
     fn preview_redeem(env: Env, assets: i128) -> Result<i128, VaultError> {
-        Self::require_init(&env)?;
+        YieldVault::require_init(&env)?;
         if assets <= 0 {
             return Err(VaultError::ZeroAmount);
         }
@@ -869,7 +900,7 @@ impl VaultStandard for YieldVault {
     }
 
     fn share_price(env: Env) -> Result<i128, VaultError> {
-        Self::require_init(&env)?;
+        YieldVault::require_init(&env)?;
         let total_shares: i128 = env
             .storage()
             .instance()
