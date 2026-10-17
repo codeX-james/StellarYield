@@ -8,6 +8,12 @@ use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
+use crate::network::tie_break::MatchPriority;
+
+pub mod snapshot;
+
+pub use snapshot::{BookEvent, OrderBookSnapshot, SequencedEvent, SnapshotError};
+
 /// Order side (buy or sell)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Side {
@@ -127,8 +133,11 @@ pub struct PriceLevel {
     pub price: u128,
     /// Total amount at this price level
     pub total_amount: u128,
-    /// Orders at this price level (ordered by time)
+    /// Orders at this price level, in canonical match order
+    /// (timestamp, then order ID) so every peer agrees on queue position
     pub orders: VecDeque<String>, // Order IDs
+    /// Match priority of each entry in `orders`, kept index-aligned
+    priorities: VecDeque<MatchPriority>,
 }
 
 impl PriceLevel {
@@ -137,6 +146,7 @@ impl PriceLevel {
             price,
             total_amount: 0,
             orders: VecDeque::new(),
+            priorities: VecDeque::new(),
         }
     }
 }
@@ -165,14 +175,22 @@ impl OrderBookSide {
             .entry(order.price)
             .or_insert_with(|| PriceLevel::new(order.price));
         level.total_amount = level.total_amount.saturating_add(order.remaining());
-        level.orders.push_back(order.id.clone());
+        // Insert by canonical priority rather than arrival so that peers
+        // receiving the same orders in a different sequence build the same queue.
+        let priority = MatchPriority::of(order);
+        let index = level.priorities.partition_point(|p| p <= &priority);
+        level.priorities.insert(index, priority);
+        level.orders.insert(index, order.id.clone());
     }
 
     /// Remove an order from the book
     pub fn remove_order(&mut self, order: &Order) {
         if let Some(level) = self.levels.get_mut(&order.price) {
             level.total_amount = level.total_amount.saturating_sub(order.remaining());
-            level.orders.retain(|id| id != &order.id);
+            if let Some(index) = level.orders.iter().position(|id| id == &order.id) {
+                level.orders.remove(index);
+                level.priorities.remove(index);
+            }
 
             if level.total_amount == 0 && level.orders.is_empty() {
                 self.levels.remove(&order.price);
